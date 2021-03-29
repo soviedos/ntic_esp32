@@ -1,9 +1,15 @@
+/**
+ * @Author: Sergio Oviedo Seas
+ * @Date:   2021-03-07 19:37:40
+ * @Last Modified by:   Sergio Oviedo Seas
+ * @Last Modified time: 2021-03-27 19:44:29
+ */
 
 #define IOT_HUB_NAME_NTic "NTicSolution"
 #define DEVICE_NAME_NTic "esp32"
 #define SAS_TOKEN_NTic "SharedAccessSignature sr=NTicSolution.azure-devices.net%2Fdevices%2Fesp32&sig=Efmz0F7r9zocWE97Y4IYMDdEuLw2tl6sJUN9TE0eTxo%3D&se=1648039565"
 
-#define SSID_SECRET "TNT3"     // your network SSID (name of wifi network)
+#define SSID_SECRET "TNT1"     // your network SSID (name of wifi network)
 #define PASS_SECRET "DFGHMNBVZX" // your network password
 #define ROOT_CERT \
      "-----BEGIN CERTIFICATE-----\n" \

@@ -1,3 +1,9 @@
+/**
+ * @Author: Sergio Oviedo Seas
+ * @Date:   2021-03-07 18:00:51
+ * @Last Modified by:   Sergio Oviedo Seas
+ * @Last Modified time: 2021-03-28 20:22:08
+ */
 
 /*
   ## Hardware Connections (ESP32 Arduino):
@@ -36,61 +42,145 @@ const char* root_ca = ROOT_CERT; // Root Certificate for Azure IoT Hub
 // MAX30102 sensor instance
 MAX30105 particleSensor;
 
-//MAX30102 configuration parameters
-double avered = 0; double aveir = 0;
-double sumirrms = 0;
-double sumredrms = 0;
-int i = 0;
-int Num = 100;//calculate SpO2 by this sampling interval
-
-double ESpO2 = 95.0;//initial value of estimated SpO2
-double FSpO2 = 0.7; //filter factor for estimated SpO2
-double frate = 0.95; //low pass filter for IR/red LED value to eliminate AC component
-#define TIMETOBOOT 3000 // wait for this time(msec) to output SpO2
-#define SCALE 88.0 //adjust to display heart beat and SpO2 in the same scale
-#define SAMPLING 5 //if you want to see heart beat more precisely , set SAMPLING to 1
-#define FINGER_ON 30000 // if red signal is lower than this , it indicates your finger is not on the sensor
-#define MINIMUM_SPO2 80.0
-
+// Heart Rate variables
 const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; //Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; //Time at which the last beat occurred
 float beatsPerMinute;
 int beatAvg;
+long countCycles = 0;
 
-#define USEFIFO
+// SpO2 variables
+double avered = 0; 
+double aveir = 0;
+double sumirrms = 0;
+double sumredrms = 0;
+int i = 0;
+int Num = 100;//calculate SpO2 by this sampling interval
+double ESpO2 = 0;//initial value of estimated SpO2
+double FSpO2 = 0.7; //filter factor for estimated SpO2
+double frate = 0.95; //low pass filter for IR/red LED value to eliminate AC component
+uint32_t ir, red , green;
+double fred, fir;
+double SpO2 = 0; //raw SpO2 before low pass filtered
 
-void sendRequest(String iothubName, String deviceName, String sasToken, String message) {
+// Temperature variable
+float temperature = 0;
 
-  // HTTPS connection to Azure IoT Hub
-  if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
+// Sub routine to calculate SpO2
+double readSpO2() {
 
-    HTTPClient http;
-    String url = "https://" + iothubName + ".azure-devices.net/devices/" + deviceName + "/messages/events?api-version=2016-11-14";
-    http.begin(url, root_ca); //Specify the URL and certificate
-    http.addHeader("Authorization", sasToken);
-    http.addHeader("Content-Type", "application/json");
-    int httpCode = http.POST(message);
+  #ifdef MAX30105
+  red = particleSensor.getFIFORed(); //Sparkfun's MAX30105
+  ir = particleSensor.getFIFOIR();  //Sparkfun's MAX30105
+  #else
+  red = particleSensor.getFIFOIR(); //why getFOFOIR output Red data by MAX30102 on MH-ET LIVE breakout board
+  ir = particleSensor.getFIFORed(); //why getFIFORed output IR data by MAX30102 on MH-ET LIVE breakout board
+  #endif
 
-    if (httpCode > 0) { //Check for the returning code
+  i++;
+  fred = (double)red;
+  fir = (double)ir;
+  avered = avered * frate + (double)red * (1.0 - frate);//average red level by low pass filter
+  aveir = aveir * frate + (double)ir * (1.0 - frate); //average IR level by low pass filter
+  sumredrms += (fred - avered) * (fred - avered); //square sum of alternate component of red level
+  sumirrms += (fir - aveir) * (fir - aveir);//square sum of alternate component of IR level
 
-        String payload = http.getString();
-        Serial.println(httpCode);
-        Serial.println(payload);
-      }
+  if ((i % Num) == 0) {
+      
+    double R = (sqrt(sumredrms) / avered) / (sqrt(sumirrms) / aveir);
+    SpO2 = -23.3 * (R - 0.4) + 100; //http://ww1.microchip.com/downloads/jp/AppNotes/00001525B_JP.pdf
+    ESpO2 = FSpO2 * ESpO2 + (1.0 - FSpO2) * SpO2;//low pass filter
+    sumredrms = 0.0; sumirrms = 0.0; i = 0;
 
-    else {
-      Serial.println("Error on HTTP request");
-    }
-
-    http.end(); //Free the resources
   }
+
+  if (ESpO2 > 100.0) {
+    ESpO2 = 100;
+  }
+
+  return ESpO2;
 
 }
 
+// Sub routine to read temperature
+// String readTemp() {
+
+//   temperature = particleSensor.readTemperature();
+//   char buff[10];
+//   String s = dtostrf(temperature, 4, 6, buff);
+//   Serial.print("Temperature C = ");
+//   Serial.println(temperature);
+//   return s;
+
+// }
+
+// float readBeatsPerMinute() {
+
+//   long irValue = particleSensor.getIR();
+//   Serial.print("IR = ");
+//   Serial.println(irValue);
+ 
+//   if (!checkForBeat(irValue))
+//   {
+//     //We sensed a beat!
+//     long delta = millis() - lastBeat;
+//     lastBeat = millis();
+//     Serial.println(delta);
+//     beatsPerMinute = 60 / (delta / 1000.0);
+    
+//     if (beatsPerMinute < 255 && beatsPerMinute > 20)
+//     {
+//     rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+//     rateSpot %= RATE_SIZE; //Wrap variable
+    
+//     //Take average of readings
+//     beatAvg = 0;
+//     for (byte x = 0 ; x < RATE_SIZE ; x++)
+//     beatAvg += rates[x];
+//     beatAvg /= RATE_SIZE;
+//     } 
+//   } else {
+//     Serial.println("Error to read beats");
+//   }
+//   return beatsPerMinute;
+// }
+
+// Sub Routine to send data to Azure IoT Hub
+// void sendRequest(String iothubName, String deviceName, String sasToken, String message) {
+
+//   // HTTPS connection to Azure IoT Hub
+//   if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
+
+//     HTTPClient http;
+//     String url = "https://" + iothubName + ".azure-devices.net/devices/" + deviceName + "/messages/events?api-version=2016-11-14";
+//     http.begin(url, root_ca); //Specify the URL and certificate
+//     http.addHeader("Authorization", sasToken);
+//     http.addHeader("Content-Type", "application/json");
+//     int httpCode = http.POST(message);
+
+//     if (httpCode > 0) { //Check for the returning code
+
+//         String payload = http.getString();
+//         Serial.print("Http code = ");
+//         Serial.println(httpCode);
+//         Serial.print("Payload = ");
+//         Serial.println(payload);
+//       }
+
+//     else {
+//       Serial.println("Error on HTTP request");
+//     }
+
+//     http.end(); //Free the resources
+//   }
+
+// }
+
+///////////////////////////////////////////////////////////////////////////////
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(100);
 
   Serial.print("Attempting to connect to SSID: ");
@@ -98,7 +188,7 @@ void setup() {
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
+    Serial.print("Connecting WiFi...");
     delay(1000);
   }
 
@@ -108,81 +198,63 @@ void setup() {
     Serial.println("MAX30102 was not found ");
   }
 
-  //Setup to sense a nice looking saw tooth on the plotter
-  byte ledBrightness = 0x7F; //Options: 0=Off to 255=50mA
-  byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
-  byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
-  //Options: 1 = IR only, 2 = Red + IR on MH-ET LIVE MAX30102 board
-  int sampleRate = 200; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
-  int pulseWidth = 411; //Options: 69, 118, 215, 411
-  int adcRange = 16384; //Options: 2048, 4096, 8192, 16384
-  // Set up the wanted parameters
-  particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
-
+  particleSensor.setup();
+  particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+  
+  //  Die Temperature enable
   particleSensor.enableDIETEMPRDY();
 
 }
 
 void loop() {
-  sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{temperature: 24.5}");
-  delay(10000);
 
-  uint32_t ir, red , green;
-  double fred, fir;
-  double SpO2 = 0; //raw SpO2 before low pass filtered
+  //String deviceId = DEVICE_NAME;
+  //sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + "C }");
+  long irValue = particleSensor.getIR();
+  Serial.println(irValue);
+ 
+  if (irValue < 50000) {
 
-#ifdef USEFIFO
-  particleSensor.check(); //Check the sensor, read up to 3 samples
+    Serial.println("Please, place your index finger on the sensor");
+    countCycles = 0;
+    i = 0;
 
-  while (particleSensor.available()) {//do we have new data
-#ifdef MAX30105
-   red = particleSensor.getFIFORed(); //Sparkfun's MAX30105
-    ir = particleSensor.getFIFOIR();  //Sparkfun's MAX30105
-#else
-    red = particleSensor.getFIFOIR(); //why getFOFOIR output Red data by MAX30102 on MH-ET LIVE breakout board
-    ir = particleSensor.getFIFORed(); //why getFIFORed output IR data by MAX30102 on MH-ET LIVE breakout board
-#endif
-
+  } else if(checkForBeat(irValue) == true) {
     
+      long delta = millis() - lastBeat;
+      lastBeat = millis();
+      
+      beatsPerMinute = 60 / (delta / 1000.0);
     
-    i++;
-    fred = (double)red;
-    fir = (double)ir;
-    avered = avered * frate + (double)red * (1.0 - frate);//average red level by low pass filter
-    aveir = aveir * frate + (double)ir * (1.0 - frate); //average IR level by low pass filter
-    sumredrms += (fred - avered) * (fred - avered); //square sum of alternate component of red level
-    sumirrms += (fir - aveir) * (fir - aveir);//square sum of alternate component of IR level
-    if ((i % SAMPLING) == 0) {//slow down graph plotting speed for arduino Serial plotter by thin out
-      if ( millis() > TIMETOBOOT) {
-        float ir_forGraph = (2.0 * fir - aveir) / aveir * SCALE;
-        float red_forGraph = (2.0 * fred - avered) / avered * SCALE;
-        //trancation for Serial plotter's autoscaling
-        if ( ir_forGraph > 100.0) ir_forGraph = 100.0;
-        if ( ir_forGraph < 80.0) ir_forGraph = 80.0;
-        if ( red_forGraph > 100.0 ) red_forGraph = 100.0;
-        if ( red_forGraph < 80.0 ) red_forGraph = 80.0;
-                Serial.print(red); Serial.print(","); Serial.print(ir);Serial.println(".");
-        if (ir < FINGER_ON) ESpO2 = MINIMUM_SPO2; //indicator for finger detached
-        float temperature = particleSensor.readTemperature();
-        Serial.print("Temperature C = ");
-        Serial.println(temperature);
-        //Blynk.run();
-        //Blynk.virtualWrite(V4,ESpO2 );
-        Serial.print("Oxygen % = ");
-        Serial.println(ESpO2);
+      if (beatsPerMinute < 255 && beatsPerMinute > 20) {
+
+        rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+        rateSpot %= RATE_SIZE; //Wrap variable
+        
+        //Take average of readings
+        beatAvg = 0;
+        for (byte x = 0 ; x < RATE_SIZE ; x++)
+        beatAvg += rates[x];
+        beatAvg /= RATE_SIZE;
+        
       }
+
+      temperature = particleSensor.readTemperature();
+      ESpO2 = readSpO2();
+
+      countCycles ++;
+      if (countCycles >= 16) {
+        Serial.print("Ritmo cardiaco = ");
+        Serial.println(beatAvg);
+        Serial.print("Temperature = ");
+        Serial.println(temperature);
+        Serial.print("SpO2 = ");
+        Serial.println(ESpO2); 
+      }else {
+          Serial.println("Obteniendo datos...");
+        }
+    } else {
+      Serial.println("Failing to enter main loop");
     }
-    if ((i % Num) == 0) {
-      double R = (sqrt(sumredrms) / avered) / (sqrt(sumirrms) / aveir);
-       Serial.println(R);
-      SpO2 = -23.3 * (R - 0.4) + 100; //http://ww1.microchip.com/downloads/jp/AppNotes/00001525B_JP.pdf
-      ESpO2 = FSpO2 * ESpO2 + (1.0 - FSpO2) * SpO2;//low pass filter
-        Serial.print(SpO2);Serial.print(",");Serial.println(ESpO2);
-      sumredrms = 0.0; sumirrms = 0.0; i = 0;
-      break;
-    }
-    particleSensor.nextSample(); //We're finished with this sample so move to next sample
-    Serial.println(SpO2);
-  }
-#endif
+  delay(500);
 }
