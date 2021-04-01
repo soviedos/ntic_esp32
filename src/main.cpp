@@ -20,6 +20,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "MAX30105.h" //sparkfun MAX3010X library
+#include <NTPClient.h>
 #include "heartRate.h"
 #include "credentials.h"
 
@@ -44,6 +45,15 @@ const char* root_ca = ROOT_CERT; // Root Certificate for Azure IoT Hub
 
 // MAX30102 sensor instance
 MAX30105 particleSensor;
+
+// Define NTP Client to get time
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+
+// Variables to save date and time
+String formattedDate;
+String dayStamp;
+String timeStamp;
 
 // Heart Rate variables
 const byte RATE_SIZE = 8; //Increase this for more averaging. 4 is good.
@@ -113,13 +123,57 @@ String readSpO2() {
   }
 
   if (ESpO2 > 100.0) {
+
     ESpO2 = 100;
+
   }
 
   char buff[10];
   String ESp02String = dtostrf(ESpO2, 4, 6, buff);
 
   return ESp02String;
+
+}
+
+String getDate() {
+
+  while(!timeClient.update()) {
+    timeClient.forceUpdate();
+  }
+  // The formattedDate comes with the following format:
+  // 2018-05-28T16:00:13Z
+  // We need to extract date and time
+  formattedDate = timeClient.getFormattedDate();
+  Serial.println(formattedDate);
+
+  // Extract date
+  int splitT = formattedDate.indexOf("T");
+  dayStamp = formattedDate.substring(0, splitT);
+  Serial.print("DATE: ");
+  Serial.println(dayStamp);
+ 
+  return dayStamp;
+
+}
+
+String getTime() {
+
+  while(!timeClient.update()) {
+    timeClient.forceUpdate();
+  }
+  // The formattedDate comes with the following format:
+  // 2018-05-28T16:00:13Z
+  // We need to extract date and time
+  formattedDate = timeClient.getFormattedDate();
+  Serial.println(formattedDate);
+
+  // Extract time
+  int splitT = formattedDate.indexOf("T");
+  timeStamp = formattedDate.substring(splitT+1, formattedDate.length()-1);
+  Serial.print("HOUR: ");
+  Serial.println(timeStamp);
+
+  return timeStamp;
 
 }
 
@@ -180,6 +234,15 @@ void setup() {
   //  Die Temperature enable
   particleSensor.enableDIETEMPRDY();
 
+  // Initialize a NTPClient to get time
+  timeClient.begin();
+  // Set offset time in seconds to adjust for your timezone, for example:
+  // GMT +1 = 3600
+  // GMT +8 = 28800
+  // GMT -1 = -3600
+  // GMT 0 = 0
+  timeClient.setTimeOffset(3600);
+
 }
 
 void loop() {
@@ -220,7 +283,7 @@ void loop() {
     countCycles ++;
     if (countCycles >= 16) {
 
-      sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + " Ritmo cardiaco = " + beatAvgString + " SpO2 = " + readSpO2() + "}");
+      sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + " Ritmo cardiaco = " + beatAvgString + " SpO2 = " + readSpO2() + " Fecha = " + getDate() + " Hora = " + getTime() + "}");
 
       Serial.print("Ritmo cardiaco = ");
       Serial.println(beatAvg);
@@ -228,7 +291,7 @@ void loop() {
       Serial.println(temperature);
       Serial.print("SpO2 = ");
       Serial.println(ESpO2); 
-      
+
     } else {
         Serial.println("Obteniendo datos...");
       }
