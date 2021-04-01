@@ -2,7 +2,7 @@
  * @Author: Sergio Oviedo Seas
  * @Date:   2021-03-07 18:00:51
  * @Last Modified by:   Sergio Oviedo Seas
- * @Last Modified time: 2021-03-28 20:22:08
+ * @Last Modified time: 2021-03-30 19:36:20
  */
 
 /*
@@ -22,6 +22,9 @@
 #include "MAX30105.h" //sparkfun MAX3010X library
 #include "heartRate.h"
 #include "credentials.h"
+
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 // Azure IoT Hub Credentials
 #define IOT_HUB_NAME IOT_HUB_NAME_NTic
@@ -43,13 +46,14 @@ const char* root_ca = ROOT_CERT; // Root Certificate for Azure IoT Hub
 MAX30105 particleSensor;
 
 // Heart Rate variables
-const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
+const byte RATE_SIZE = 8; //Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; //Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; //Time at which the last beat occurred
 float beatsPerMinute;
 int beatAvg;
 long countCycles = 0;
+String beatAvgString;
 
 // SpO2 variables
 double avered = 0; 
@@ -68,8 +72,20 @@ double SpO2 = 0; //raw SpO2 before low pass filtered
 // Temperature variable
 float temperature = 0;
 
+// Sub routine to read temperature
+String readTemp() {
+
+  temperature = particleSensor.readTemperature();
+  char buff[10];
+  String s = dtostrf(temperature, 4, 6, buff);
+  Serial.print("Temperature C = ");
+  Serial.println(temperature);
+  return s;
+
+}
+
 // Sub routine to calculate SpO2
-double readSpO2() {
+String readSpO2() {
 
   #ifdef MAX30105
   red = particleSensor.getFIFORed(); //Sparkfun's MAX30105
@@ -100,83 +116,43 @@ double readSpO2() {
     ESpO2 = 100;
   }
 
-  return ESpO2;
+  char buff[10];
+  String ESp02String = dtostrf(ESpO2, 4, 6, buff);
+
+  return ESp02String;
 
 }
 
-// Sub routine to read temperature
-// String readTemp() {
+//Sub Routine to send data to Azure IoT Hub
+void sendRequest(String iothubName, String deviceName, String sasToken, String message) {
 
-//   temperature = particleSensor.readTemperature();
-//   char buff[10];
-//   String s = dtostrf(temperature, 4, 6, buff);
-//   Serial.print("Temperature C = ");
-//   Serial.println(temperature);
-//   return s;
+  // HTTPS connection to Azure IoT Hub
+  if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
 
-// }
+    HTTPClient http;
+    String url = "https://" + iothubName + ".azure-devices.net/devices/" + deviceName + "/messages/events?api-version=2016-11-14";
+    http.begin(url, root_ca); //Specify the URL and certificate
+    http.addHeader("Authorization", sasToken);
+    http.addHeader("Content-Type", "application/json");
+    int httpCode = http.POST(message);
 
-// float readBeatsPerMinute() {
+    if (httpCode > 0) { //Check for the returning code
 
-//   long irValue = particleSensor.getIR();
-//   Serial.print("IR = ");
-//   Serial.println(irValue);
- 
-//   if (!checkForBeat(irValue))
-//   {
-//     //We sensed a beat!
-//     long delta = millis() - lastBeat;
-//     lastBeat = millis();
-//     Serial.println(delta);
-//     beatsPerMinute = 60 / (delta / 1000.0);
-    
-//     if (beatsPerMinute < 255 && beatsPerMinute > 20)
-//     {
-//     rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-//     rateSpot %= RATE_SIZE; //Wrap variable
-    
-//     //Take average of readings
-//     beatAvg = 0;
-//     for (byte x = 0 ; x < RATE_SIZE ; x++)
-//     beatAvg += rates[x];
-//     beatAvg /= RATE_SIZE;
-//     } 
-//   } else {
-//     Serial.println("Error to read beats");
-//   }
-//   return beatsPerMinute;
-// }
+        String payload = http.getString();
+        Serial.print("Http code = ");
+        Serial.println(httpCode);
+        Serial.print("Payload = ");
+        Serial.println(payload);
+      }
 
-// Sub Routine to send data to Azure IoT Hub
-// void sendRequest(String iothubName, String deviceName, String sasToken, String message) {
+    else {
+      Serial.println("Error on HTTP request");
+    }
 
-//   // HTTPS connection to Azure IoT Hub
-//   if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
+    http.end(); //Free the resources
+  }
 
-//     HTTPClient http;
-//     String url = "https://" + iothubName + ".azure-devices.net/devices/" + deviceName + "/messages/events?api-version=2016-11-14";
-//     http.begin(url, root_ca); //Specify the URL and certificate
-//     http.addHeader("Authorization", sasToken);
-//     http.addHeader("Content-Type", "application/json");
-//     int httpCode = http.POST(message);
-
-//     if (httpCode > 0) { //Check for the returning code
-
-//         String payload = http.getString();
-//         Serial.print("Http code = ");
-//         Serial.println(httpCode);
-//         Serial.print("Payload = ");
-//         Serial.println(payload);
-//       }
-
-//     else {
-//       Serial.println("Error on HTTP request");
-//     }
-
-//     http.end(); //Free the resources
-//   }
-
-// }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 void setup() {
@@ -210,8 +186,8 @@ void loop() {
 
   //String deviceId = DEVICE_NAME;
   //sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + "C }");
+  readSpO2();
   long irValue = particleSensor.getIR();
-  Serial.println(irValue);
  
   if (irValue < 50000) {
 
@@ -221,40 +197,40 @@ void loop() {
 
   } else if(checkForBeat(irValue) == true) {
     
-      long delta = millis() - lastBeat;
-      lastBeat = millis();
+    long delta = millis() - lastBeat;
+    lastBeat = millis();
       
-      beatsPerMinute = 60 / (delta / 1000.0);
+    beatsPerMinute = 60 / (delta / 1000.0);
     
-      if (beatsPerMinute < 255 && beatsPerMinute > 20) {
+    if (beatsPerMinute < 255 && beatsPerMinute > 20) {
 
-        rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-        rateSpot %= RATE_SIZE; //Wrap variable
+      rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+      rateSpot %= RATE_SIZE; //Wrap variable
         
-        //Take average of readings
-        beatAvg = 0;
-        for (byte x = 0 ; x < RATE_SIZE ; x++)
-        beatAvg += rates[x];
-        beatAvg /= RATE_SIZE;
-        
-      }
-
-      temperature = particleSensor.readTemperature();
-      ESpO2 = readSpO2();
-
-      countCycles ++;
-      if (countCycles >= 16) {
-        Serial.print("Ritmo cardiaco = ");
-        Serial.println(beatAvg);
-        Serial.print("Temperature = ");
-        Serial.println(temperature);
-        Serial.print("SpO2 = ");
-        Serial.println(ESpO2); 
-      }else {
-          Serial.println("Obteniendo datos...");
-        }
-    } else {
-      Serial.println("Failing to enter main loop");
+      //Take average of readings
+      beatAvg = 0;
+      for (byte x = 0 ; x < RATE_SIZE ; x++)
+      beatAvg += rates[x];
+      beatAvg /= RATE_SIZE;
+      char buff[10];
+      beatAvgString = dtostrf(beatAvg, 4, 6, buff);
+      
     }
-  delay(500);
+
+    countCycles ++;
+    if (countCycles >= 16) {
+
+      sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + " Ritmo cardiaco = " + beatAvgString + " SpO2 = " + readSpO2() + "}");
+
+      Serial.print("Ritmo cardiaco = ");
+      Serial.println(beatAvg);
+      Serial.print("Temperature = ");
+      Serial.println(temperature);
+      Serial.print("SpO2 = ");
+      Serial.println(ESpO2); 
+      
+    } else {
+        Serial.println("Obteniendo datos...");
+      }
+    } 
 }
