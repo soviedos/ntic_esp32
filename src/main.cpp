@@ -241,7 +241,8 @@ void setup() {
   // GMT +8 = 28800
   // GMT -1 = -3600
   // GMT 0 = 0
-  timeClient.setTimeOffset(3600);
+  // Costa Rica GMT -6 = -21600
+  timeClient.setTimeOffset(-21600);
 
 }
 
