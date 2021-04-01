@@ -2,7 +2,7 @@
  * @Author: Sergio Oviedo Seas
  * @Date:   2021-03-07 18:00:51
  * @Last Modified by:   Sergio Oviedo Seas
- * @Last Modified time: 2021-03-30 19:36:20
+ * @Last Modified time: 2021-04-01 14:50:20
  */
 
 /*
@@ -19,7 +19,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include "MAX30105.h" //sparkfun MAX3010X library
+#include "MAX30105.h" // sparkfun MAX3010X library
 #include <NTPClient.h>
 #include "heartRate.h"
 #include "credentials.h"
@@ -56,10 +56,10 @@ String dayStamp;
 String timeStamp;
 
 // Heart Rate variables
-const byte RATE_SIZE = 8; //Increase this for more averaging. 4 is good.
-byte rates[RATE_SIZE]; //Array of heart rates
+const byte RATE_SIZE = 8; // Increase this for more averaging. 4 is good.
+byte rates[RATE_SIZE]; // Array of heart rates
 byte rateSpot = 0;
-long lastBeat = 0; //Time at which the last beat occurred
+long lastBeat = 0; // Time at which the last beat occurred
 float beatsPerMinute;
 int beatAvg;
 long countCycles = 0;
@@ -71,13 +71,13 @@ double aveir = 0;
 double sumirrms = 0;
 double sumredrms = 0;
 int i = 0;
-int Num = 100;//calculate SpO2 by this sampling interval
-double ESpO2 = 0;//initial value of estimated SpO2
-double FSpO2 = 0.7; //filter factor for estimated SpO2
-double frate = 0.95; //low pass filter for IR/red LED value to eliminate AC component
+int Num = 100;// calculate SpO2 by this sampling interval
+double ESpO2 = 0;// initial value of estimated SpO2
+double FSpO2 = 0.7; // filter factor for estimated SpO2
+double frate = 0.95; // low pass filter for IR/red LED value to eliminate AC component
 uint32_t ir, red , green;
 double fred, fir;
-double SpO2 = 0; //raw SpO2 before low pass filtered
+double SpO2 = 0; // raw SpO2 before low pass filtered
 
 // Temperature variable
 float temperature = 0;
@@ -88,8 +88,6 @@ String readTemp() {
   temperature = particleSensor.readTemperature();
   char buff[10];
   String s = dtostrf(temperature, 4, 6, buff);
-  Serial.print("Temperature C = ");
-  Serial.println(temperature);
   return s;
 
 }
@@ -98,25 +96,25 @@ String readTemp() {
 String readSpO2() {
 
   #ifdef MAX30105
-  red = particleSensor.getFIFORed(); //Sparkfun's MAX30105
-  ir = particleSensor.getFIFOIR();  //Sparkfun's MAX30105
+  red = particleSensor.getFIFORed(); // Sparkfun's MAX30105
+  ir = particleSensor.getFIFOIR();  // Sparkfun's MAX30105
   #else
-  red = particleSensor.getFIFOIR(); //why getFOFOIR output Red data by MAX30102 on MH-ET LIVE breakout board
-  ir = particleSensor.getFIFORed(); //why getFIFORed output IR data by MAX30102 on MH-ET LIVE breakout board
+  red = particleSensor.getFIFOIR(); // why getFOFOIR output Red data by MAX30102 on MH-ET LIVE breakout board
+  ir = particleSensor.getFIFORed(); // why getFIFORed output IR data by MAX30102 on MH-ET LIVE breakout board
   #endif
 
   i++;
   fred = (double)red;
   fir = (double)ir;
-  avered = avered * frate + (double)red * (1.0 - frate);//average red level by low pass filter
-  aveir = aveir * frate + (double)ir * (1.0 - frate); //average IR level by low pass filter
-  sumredrms += (fred - avered) * (fred - avered); //square sum of alternate component of red level
-  sumirrms += (fir - aveir) * (fir - aveir);//square sum of alternate component of IR level
+  avered = avered * frate + (double)red * (1.0 - frate);// average red level by low pass filter
+  aveir = aveir * frate + (double)ir * (1.0 - frate); // average IR level by low pass filter
+  sumredrms += (fred - avered) * (fred - avered); // square sum of alternate component of red level
+  sumirrms += (fir - aveir) * (fir - aveir);// square sum of alternate component of IR level
 
   if ((i % Num) == 0) {
       
     double R = (sqrt(sumredrms) / avered) / (sqrt(sumirrms) / aveir);
-    SpO2 = -23.3 * (R - 0.4) + 100; //http://ww1.microchip.com/downloads/jp/AppNotes/00001525B_JP.pdf
+    SpO2 = -23.3 * (R - 0.4) + 100; // http://ww1.microchip.com/downloads/jp/AppNotes/00001525B_JP.pdf
     ESpO2 = FSpO2 * ESpO2 + (1.0 - FSpO2) * SpO2;//low pass filter
     sumredrms = 0.0; sumirrms = 0.0; i = 0;
 
@@ -185,12 +183,12 @@ void sendRequest(String iothubName, String deviceName, String sasToken, String m
 
     HTTPClient http;
     String url = "https://" + iothubName + ".azure-devices.net/devices/" + deviceName + "/messages/events?api-version=2016-11-14";
-    http.begin(url, root_ca); //Specify the URL and certificate
+    http.begin(url, root_ca); // Specify the URL and certificate
     http.addHeader("Authorization", sasToken);
     http.addHeader("Content-Type", "application/json");
     int httpCode = http.POST(message);
 
-    if (httpCode > 0) { //Check for the returning code
+    if (httpCode > 0) { // Check for the returning code
 
         String payload = http.getString();
         Serial.print("Http code = ");
@@ -203,7 +201,7 @@ void sendRequest(String iothubName, String deviceName, String sasToken, String m
       Serial.println("Error on HTTP request");
     }
 
-    http.end(); //Free the resources
+    http.end(); // Free the resources
   }
 
 }
@@ -248,8 +246,6 @@ void setup() {
 
 void loop() {
 
-  //String deviceId = DEVICE_NAME;
-  //sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + "C }");
   readSpO2();
   long irValue = particleSensor.getIR();
  
