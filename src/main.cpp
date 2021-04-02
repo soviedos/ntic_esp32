@@ -19,8 +19,9 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include "MAX30105.h" // sparkfun MAX3010X library
 #include <NTPClient.h>
+#include <ArduinoJson.h>
+#include "MAX30105.h" // sparkfun MAX3010X library
 #include "heartRate.h"
 #include "credentials.h"
 
@@ -39,7 +40,7 @@ const char* password = PASS_SECRET; // your network password
 // WiFi  object instance
 WiFiClientSecure client;
 
-// Created with openssl s_client -showcerts -connect NTicSolutions.azure-devices.net:443
+// Created with openssl s_client -showcerts -connect 
 // and by picking the root certificate
 const char* root_ca = ROOT_CERT; // Root Certificate for Azure IoT Hub
 
@@ -142,13 +143,10 @@ String getDate() {
   // 2018-05-28T16:00:13Z
   // We need to extract date and time
   formattedDate = timeClient.getFormattedDate();
-  Serial.println(formattedDate);
 
   // Extract date
   int splitT = formattedDate.indexOf("T");
   dayStamp = formattedDate.substring(0, splitT);
-  Serial.print("DATE: ");
-  Serial.println(dayStamp);
  
   return dayStamp;
 
@@ -163,13 +161,10 @@ String getTime() {
   // 2018-05-28T16:00:13Z
   // We need to extract date and time
   formattedDate = timeClient.getFormattedDate();
-  Serial.println(formattedDate);
 
   // Extract time
   int splitT = formattedDate.indexOf("T");
   timeStamp = formattedDate.substring(splitT+1, formattedDate.length()-1);
-  Serial.print("HOUR: ");
-  Serial.println(timeStamp);
 
   return timeStamp;
 
@@ -280,14 +275,24 @@ void loop() {
     countCycles ++;
     if (countCycles >= 16) {
 
-      sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, "{Temperature = " + readTemp() + " Ritmo cardiaco = " + beatAvgString + " SpO2 = " + readSpO2() + " Fecha = " + getDate() + " Hora = " + getTime() + "}");
-
       Serial.print("Ritmo cardiaco = ");
       Serial.println(beatAvg);
       Serial.print("Temperature = ");
       Serial.println(temperature);
       Serial.print("SpO2 = ");
       Serial.println(ESpO2); 
+      StaticJsonDocument<256> doc;
+      doc["deviceId"] = DEVICE_NAME;
+      doc["body temperature"] = readTemp();
+      doc["heart beat"] = beatAvgString;
+      doc["SpO2"] = readSpO2();
+      doc["date"] = getDate();
+      doc["time"] = getTime();
+      String requestBody;
+      serializeJson(doc, requestBody);
+
+      sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, requestBody);
+
 
     } else {
         Serial.println("Obteniendo datos...");
