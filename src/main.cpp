@@ -57,7 +57,7 @@ String dayStamp;
 String timeStamp;
 
 // Heart Rate variables
-const byte RATE_SIZE = 8; // Increase this for more averaging. 4 is good.
+const byte RATE_SIZE = 16; // Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; // Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; // Time at which the last beat occurred
@@ -284,8 +284,10 @@ void loop() {
       StaticJsonDocument<256> doc;
       doc["deviceId"] = DEVICE_NAME;
       doc["body temperature"] = readTemp();
-      doc["heart beat"] = beatAvgString;
+      doc["heart beat"] = beatAvg;
       doc["SpO2"] = readSpO2();
+      doc["temperature Ambient"] = 25;
+      doc["humidity"] = 50;
       doc["date"] = getDate();
       doc["time"] = getTime();
       String requestBody;
