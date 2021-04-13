@@ -84,17 +84,15 @@ double SpO2 = 0; // raw SpO2 before low pass filtered
 float temperature = 0;
 
 // Sub routine to read temperature
-String readTemp() {
+float readTemp() {
 
   temperature = particleSensor.readTemperature();
-  char buff[10];
-  String s = dtostrf(temperature, 4, 6, buff);
-  return s;
+  return temperature;
 
 }
 
 // Sub routine to calculate SpO2
-String readSpO2() {
+double readSpO2() {
 
   #ifdef MAX30105
   red = particleSensor.getFIFORed(); // Sparkfun's MAX30105
@@ -127,10 +125,7 @@ String readSpO2() {
 
   }
 
-  char buff[10];
-  String ESp02String = dtostrf(ESpO2, 4, 6, buff);
-
-  return ESp02String;
+  return ESpO2;
 
 }
 
