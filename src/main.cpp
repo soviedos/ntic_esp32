@@ -57,7 +57,7 @@ String dayStamp;
 String timeStamp;
 
 // Heart Rate variables
-const byte RATE_SIZE = 16; // Increase this for more averaging. 4 is good.
+const byte RATE_SIZE = 8; // Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; // Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; // Time at which the last beat occurred
@@ -262,14 +262,11 @@ void loop() {
       for (byte x = 0 ; x < RATE_SIZE ; x++)
       beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
-      char buff[10];
-      beatAvgString = dtostrf(beatAvg, 4, 6, buff);
       
     }
 
     countCycles ++;
-    if (countCycles >= 16) {
-
+    if (countCycles > RATE_SIZE * 2) {
       Serial.print("Ritmo cardiaco = ");
       Serial.println(beatAvg);
       Serial.print("Temperature = ");
@@ -287,12 +284,12 @@ void loop() {
       doc["time"] = getTime();
       String requestBody;
       serializeJson(doc, requestBody);
-
       sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, requestBody);
 
-
     } else {
+
         Serial.println("Obteniendo datos...");
-      }
+
     } 
+    }
 }
