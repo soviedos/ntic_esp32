@@ -58,3 +58,4 @@ Module.symvers
 Mkfile.old
 dkms.conf
 >>>>>>> 22de857b3b234513981e2018b05ea3d6a018c0dc
+src/credentials.h
