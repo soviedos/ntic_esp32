@@ -262,10 +262,9 @@ void loop() {
       for (byte x = 0 ; x < RATE_SIZE ; x++)
       beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
-      
+      countCycles ++;
     }
 
-    countCycles ++;
     if (countCycles > RATE_SIZE * 2) {
       Serial.print("Ritmo cardiaco = ");
       Serial.println(beatAvg);
