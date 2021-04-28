@@ -61,10 +61,9 @@ const byte RATE_SIZE = 8; // Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; // Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; // Time at which the last beat occurred
-float beatsPerMinute;
+float beatsPerMinute = 0;
 int beatAvg;
 long countCycles = 0;
-String beatAvgString;
 
 // SpO2 variables
 double avered = 0; 
@@ -181,10 +180,10 @@ void sendRequest(String iothubName, String deviceName, String sasToken, String m
     if (httpCode > 0) { // Check for the returning code
 
         String payload = http.getString();
-        Serial.print("Http code = ");
-        Serial.println(httpCode);
-        Serial.print("Payload = ");
-        Serial.println(payload);
+        //Serial.print("Http code = ");
+        //Serial.println(httpCode);
+        //Serial.print("Payload = ");
+        //Serial.println(payload);
       }
 
     else {
@@ -199,7 +198,7 @@ void sendRequest(String iothubName, String deviceName, String sasToken, String m
 ///////////////////////////////////////////////////////////////////////////////
 void setup() {
   Serial.begin(115200);
-  delay(100);
+  //delay(100);
 
   Serial.print("Attempting to connect to SSID: ");
   Serial.println(ssid);
@@ -207,7 +206,7 @@ void setup() {
 
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print("Connecting WiFi...");
-    delay(1000);
+    delay(500);
   }
 
   // MAX30102 sensor initialization
@@ -244,7 +243,6 @@ void loop() {
     Serial.println("Please, place your index finger on the sensor");
     countCycles = 0;
     i = 0;
-    beatAvg = 0;
 
   } else if(checkForBeat(irValue) == true) {
     
@@ -257,16 +255,16 @@ void loop() {
 
       rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
       rateSpot %= RATE_SIZE; //Wrap variable
-        
+
       //Take average of readings
-      //beatAvg = 0;
+      beatAvg = 0;
       for (byte x = 0 ; x < RATE_SIZE ; x++)
       beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
       countCycles ++;
     }
 
-    if (countCycles > RATE_SIZE * 2) {
+    if (countCycles == RATE_SIZE) {
       Serial.print("Ritmo cardiaco = ");
       Serial.println(beatAvg);
       Serial.print("Temperature = ");
@@ -286,9 +284,12 @@ void loop() {
       serializeJson(doc, requestBody);
       sendRequest(IOT_HUB_NAME, DEVICE_NAME, SAS_TOKEN, requestBody);
 
+      countCycles = 0;
+      rates[0] = 0;
+
     } else {
 
-        Serial.println("Obteniendo datos...");
+        //Serial.println("Obteniendo datos...");
 
     } 
     }
