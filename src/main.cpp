@@ -244,6 +244,7 @@ void loop() {
     Serial.println("Please, place your index finger on the sensor");
     countCycles = 0;
     i = 0;
+    beatAvg = 0;
 
   } else if(checkForBeat(irValue) == true) {
     
@@ -258,7 +259,7 @@ void loop() {
       rateSpot %= RATE_SIZE; //Wrap variable
         
       //Take average of readings
-      beatAvg = 0;
+      //beatAvg = 0;
       for (byte x = 0 ; x < RATE_SIZE ; x++)
       beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
